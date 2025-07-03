@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -31,6 +30,20 @@
 
   <script>
     let data = [];
+
+    function parseFormula(raw) {
+      const today = new Date();
+      const match = typeof raw === 'string' && raw.match(/TODAY\(\)\s*([+-])\s*(\d+)/);
+      if (match) {
+        const operator = match[1];
+        const days = parseInt(match[2]);
+        const date = new Date(today);
+        if (operator === '+') date.setDate(today.getDate() + days);
+        else date.setDate(today.getDate() - days);
+        return `效期早於 ${date.toISOString().split('T')[0]}`;
+      }
+      return raw || '';
+    }
 
     async function loadData() {
       try {
@@ -66,8 +79,11 @@
         td1.textContent = row['廠商'];
         const td2 = document.createElement('td');
         td2.textContent = row['產品'];
+
+        const parsed = parseFormula(row['效期']);
         const td3 = document.createElement('td');
-        td3.textContent = `${row['狀態A'] || ''} ${row['效期'] || ''} → ${row['狀態B'] || ''}`.trim();
+        td3.textContent = `${row['狀態A'] || ''} ${parsed} → ${row['狀態B'] || ''}`.trim();
+
         tr.appendChild(td1);
         tr.appendChild(td2);
         tr.appendChild(td3);
