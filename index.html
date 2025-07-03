@@ -94,7 +94,7 @@
         const hasPrefix = (row['狀態A'] || '').includes('效期早於');
         const prefix = hasPrefix ? '' : (row['狀態A'] || '');
         let conditionText = `${prefix} ${parsed}`.trim();
-        if (row['狀態B']) conditionText += ` → ${row['狀態B']}`;
+        if (row['狀態B']) conditionText += `  ${row['狀態B']}`;
 
         const td3 = document.createElement('td');
         td3.textContent = conditionText;
