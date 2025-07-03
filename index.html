@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>產品退換查詢</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    h1 { text-align: center; color: #4b0082; }
+    input { width: 100%; padding: 8px; margin-bottom: 20px; font-size: 16px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #eee; }
+    tr:nth-child(even) { background: #f1f1f1; }
+  </style>
+</head>
+<body>
+  <h1>產品退換資訊查詢</h1>
+  <input type="text" id="searchBox" placeholder="輸入產品名稱、廠商或條件..." />
+  <table>
+    <thead>
+      <tr>
+        <th>廠商</th>
+        <th>產品</th>
+        <th>退貨條件</th>
+      </tr>
+    </thead>
+    <tbody id="resultTable"></tbody>
+  </table>
+
+  <script>
+    let data = [];
+
+    async function loadData() {
+      try {
+        const res = await fetch('./product_returns.json');
+        if (!res.ok) throw new Error('載入失敗');
+        data = await res.json();
+        renderTable('');
+      } catch (error) {
+        document.getElementById('resultTable').innerHTML = '<tr><td colspan="3">無法載入資料，請確認 product_returns.json 是否與 index.html 放在相同目錄。</td></tr>';
+        console.error('資料載入錯誤：', error);
+      }
+    }
+
+    function renderTable(keyword) {
+      const tbody = document.getElementById('resultTable');
+      tbody.innerHTML = '';
+      const filtered = data.filter(row => {
+        return (
+          row['廠商']?.includes(keyword) ||
+          row['產品']?.includes(keyword) ||
+          row['狀態A']?.includes(keyword) ||
+          row['狀態B']?.includes(keyword) ||
+          row['效期']?.toString().includes(keyword)
+        );
+      });
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">查無資料</td></tr>';
+        return;
+      }
+      filtered.forEach(row => {
+        const tr = document.createElement('tr');
+        const td1 = document.createElement('td');
+        td1.textContent = row['廠商'];
+        const td2 = document.createElement('td');
+        td2.textContent = row['產品'];
+        const td3 = document.createElement('td');
+        td3.textContent = `${row['狀態A'] || ''} ${row['效期'] || ''} → ${row['狀態B'] || ''}`.trim();
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('searchBox').addEventListener('input', e => {
+      renderTable(e.target.value.trim());
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
