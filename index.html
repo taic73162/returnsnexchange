@@ -12,6 +12,9 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eee; }
     tr:nth-child(even) { background: #f1f1f1; }
+    .green { background-color: #e1f7e1 !important; }
+    .yellow { background-color: #fffbd6 !important; }
+    .red { background-color: #ffe1e1 !important; }
   </style>
 </head>
 <body>
@@ -57,6 +60,13 @@
       }
     }
 
+    function getRowClass(content) {
+      if (/皆可退貨/.test(content)) return 'green';
+      if (/效期早於/.test(content)) return 'yellow';
+      if (/無法退貨/.test(content)) return 'red';
+      return '';
+    }
+
     function renderTable(keyword) {
       const tbody = document.getElementById('resultTable');
       tbody.innerHTML = '';
@@ -81,12 +91,19 @@
         td2.textContent = row['產品'];
 
         const parsed = parseFormula(row['效期']);
+        const hasPrefix = (row['狀態A'] || '').includes('效期早於');
+        const prefix = hasPrefix ? '' : (row['狀態A'] || '');
+        let conditionText = `${prefix} ${parsed}`.trim();
+        if (row['狀態B']) conditionText += ` → ${row['狀態B']}`;
+
         const td3 = document.createElement('td');
-        td3.textContent = `${row['狀態A'] || ''} ${parsed} → ${row['狀態B'] || ''}`.trim();
+        td3.textContent = conditionText;
 
         tr.appendChild(td1);
         tr.appendChild(td2);
         tr.appendChild(td3);
+        tr.classList.add(getRowClass(conditionText));
+
         tbody.appendChild(tr);
       });
     }
