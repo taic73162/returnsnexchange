@@ -35,14 +35,14 @@
     let data = [];
 
     function parseFormula(raw) {
-      const today = new Date();
+      const taiwanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
       const match = typeof raw === 'string' && raw.match(/TODAY\(\)\s*([+-])\s*(\d+)/);
       if (match) {
         const operator = match[1];
         const days = parseInt(match[2]);
-        const date = new Date(today);
-        if (operator === '+') date.setDate(today.getDate() + days);
-        else date.setDate(today.getDate() - days);
+        const date = new Date(taiwanNow);
+        if (operator === '+') date.setDate(taiwanNow.getDate() + days);
+        else date.setDate(taiwanNow.getDate() - days);
         return `效期早於 ${date.toISOString().split('T')[0]}`;
       }
       return raw || '';
@@ -94,7 +94,7 @@
         const hasPrefix = (row['狀態A'] || '').includes('效期早於');
         const prefix = hasPrefix ? '' : (row['狀態A'] || '');
         let conditionText = `${prefix} ${parsed}`.trim();
-        if (row['狀態B']) conditionText += `  ${row['狀態B']}`;
+        if (row['狀態B']) conditionText += ` → ${row['狀態B']}`;
 
         const td3 = document.createElement('td');
         td3.textContent = conditionText;
