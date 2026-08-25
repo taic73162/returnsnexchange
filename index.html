@@ -4,79 +4,237 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>產品退換查詢</title>
+  <!-- 引入 SheetJS 以直接讀取 Excel 檔案 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
-    h1 { text-align: center; color: #4b0082; }
-    input { width: 100%; padding: 8px; margin-bottom: 20px; font-size: 16px; }
-    table { width: 100%; border-collapse: collapse; background: white; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #eee; }
-    tr:nth-child(even) { background: #f1f1f1; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; background: #f9f9f9; color: #333; }
+    h1 { text-align: center; color: #4b0082; margin-bottom: 25px; }
+    h2 { font-size: 18px; color: #333; margin-bottom: 10px; }
+    
+    /* 資訊區塊與搜尋區塊樣式 */
+    .info-box { background: #e6f7ff; border: 1px solid #91d5ff; padding: 15px 20px; margin-bottom: 20px; border-radius: 8px; }
+    .info-box h2 { color: #0050b3; margin-top: 0; margin-bottom: 10px; }
+    .info-box ul { margin: 0; padding-left: 0; line-height: 1.8; font-size: 15px; list-style-type: none; }
+    .info-box ul li { margin-bottom: 4px; }
+    .search-section { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    
+    input { width: 100%; padding: 10px 12px; margin-bottom: 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input:focus { outline: none; border-color: #4b0082; box-shadow: 0 0 5px rgba(75,0,130,0.2); }
+    table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 10px; }
+    th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
+    th { background: #eee; font-weight: bold; }
+    tr:nth-child(even) { background: #fdfdfd; }
+    
+    /* 狀態顏色 */
     .green { background-color: #e1f7e1 !important; }
     .yellow { background-color: #fffbd6 !important; }
     .red { background-color: #ffe1e1 !important; }
   </style>
 </head>
 <body>
-  <h1>產品退換資訊查詢</h1>
-  <input type="text" id="searchBox" placeholder="輸入產品名稱、廠商或條件..." />
-  <table>
-    <thead>
-      <tr>
-        <th>廠商</th>
-        <th>產品</th>
-        <th>退貨條件</th>
-      </tr>
-    </thead>
-    <tbody id="resultTable"></tbody>
-  </table>
+  <h1>產品退貨輔助系統</h1>
+
+  <!-- 功能 2: 最頂部顯示分界日期 -->
+  <div class="info-box" id="boundaryDates">
+    <!-- JS 會自動將計算好的日期填入此處 -->
+  </div>
+
+  <!-- 功能 1: 產品末四碼搜尋區塊 (讀取產品表.xlsx) -->
+  <div class="search-section">
+    <h2>🔍 查詢產品退貨標準</h2> 
+    <input type="text" id="codeSearchBox" placeholder="請輸入產品末四碼 (例如: 7128)..." maxlength="4" />
+    <div id="excelLoadingMsg" style="color: #666; font-size: 14px; margin-bottom: 10px;">Excel 檔案載入中...</div>
+    <table>
+      <thead>
+        <tr>
+          <th>品名</th>
+          <th>退貨倉別</th>
+          <th>退貨條件</th>
+          <th>無法退貨效期</th>
+        </tr>
+      </thead>
+      <tbody id="excelResultTable">
+        <tr><td colspan="4">請輸入末四碼進行查詢</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 原有功能: 綜合條件查詢 (讀取 product_returns.json) -->
+  <div class="search-section">
+    <h2>📋 全產品退貨條件表</h2>
+    <input type="text" id="searchBox" placeholder="輸入產品名稱、廠商或條件..." />
+    <table>
+      <thead>
+        <tr>
+          <th>廠商</th>
+          <th>產品</th>
+          <th>退貨條件</th>
+        </tr>
+      </thead>
+      <tbody id="resultTable"></tbody>
+    </table>
+  </div>
 
   <script>
-    let data = [];
+    let jsonData = [];
+    let excelData = [];
 
+    // --- 日期計算與共用函式 ---
+    function getTaipeiToday() {
+      return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+    }
+
+    function formatDate(dateObj) {
+      return dateObj.toISOString().split('T')[0];
+    }
+
+    // --- 功能 2: 渲染頂部分界日期 ---
+    function renderBoundaryDates() {
+      const today = getTaipeiToday();
+      
+      // 計算過期 (89天內)
+      const d89 = new Date(today);
+      d89.setDate(today.getDate() + 89);
+      
+      // 計算近效 (90~365天)
+      const d90 = new Date(today);
+      d90.setDate(today.getDate() + 90);
+      const d365 = new Date(today);
+      d365.setDate(today.getDate() + 365);
+
+      document.getElementById('boundaryDates').innerHTML = `
+        <h2>不良原因代碼判讀</h2>
+        <ul>
+          <li><b>2400 過期</b>（<90天）：效期於 <b>${formatDate(d89)}</b> 之前</li>
+          <li><b>2401 近效</b> (90-360天)：效期於 <b>${formatDate(d90)}</b> 與 <b>${formatDate(d365)}</b> 之間</li>
+          <li><b>2402 外表破損</b></li>
+          <li><b>2403 訂單下錯/取消</b></li>
+          <li><b>2404 廠商回收不再販賣</b></li>
+          <li><b>2405 交換貨</b></li>
+          <li><b>2406 轉其他家</b></li>
+          <li><b>2407 無溫控之藥品</b></li>
+        </ul>
+      `;
+    }
+
+    // --- 功能 1: Excel 退貨條件轉換與搜尋 ---
+    function parseExcelPolicyToDate(policy) {
+      const today = getTaipeiToday();
+      let targetDate = new Date(today);
+
+      if (!policy) return '';
+
+      if (policy.includes('都可處理')) {
+        return '皆可辦理退貨，無效期限制';
+      } else if (policy.includes('不能退換') && !policy.includes('過期') && !policy.includes('效期')) {
+        return '此產品無法辦理退貨';
+      } else if (policy === '過期不能退換') {
+        return `效期早於 ${formatDate(targetDate)} 無法退貨`;
+      } else if (policy.includes('過期>1年不退換')) {
+        targetDate.setDate(targetDate.getDate() - 365);
+        return `效期早於 ${formatDate(targetDate)} 無法退貨`;
+      } else if (policy.includes('效期<6個月不能退換')) {
+        targetDate.setDate(targetDate.getDate() + 180);
+        return `效期早於 ${formatDate(targetDate)} 無法退貨`;
+      } else if (policy.includes('效期<5個月不能退換')) {
+        targetDate.setDate(targetDate.getDate() + 150);
+        return `效期早於 ${formatDate(targetDate)} 無法退貨`;
+      } else if (policy.includes('效期<3個月不能退換')) {
+        targetDate.setDate(targetDate.getDate() + 90);
+        return `效期早於 ${formatDate(targetDate)} 無法退貨`;
+      }
+      return policy; 
+    }
+
+    async function loadExcelData() {
+      const msgDiv = document.getElementById('excelLoadingMsg');
+      try {
+        const res = await fetch('./產品表.xlsx');
+        if (!res.ok) throw new Error('Excel 載入失敗');
+        const arrayBuffer = await res.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        excelData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName]);
+        msgDiv.textContent = `✅ Excel 載入成功！共載入 ${excelData.length} 筆產品資料。`;
+        msgDiv.style.color = "green";
+      } catch (error) {
+        msgDiv.innerHTML = '❌ 無法載入資料，請確認 <b>產品表.xlsx</b> 是否與 HTML 檔案放在相同目錄。';
+        msgDiv.style.color = "red";
+        console.error('Excel 載入錯誤：', error);
+      }
+    }
+
+    document.getElementById('codeSearchBox').addEventListener('input', e => {
+      const keyword = e.target.value.trim();
+      const tbody = document.getElementById('excelResultTable');
+      tbody.innerHTML = '';
+
+      if (keyword.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">請輸入末四碼進行查詢</td></tr>';
+        return;
+      }
+
+      const filtered = excelData.filter(row => 
+        row['末四碼'] && row['末四碼'].toString().includes(keyword)
+      );
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">查無此末四碼的產品資料</td></tr>';
+        return;
+      }
+
+      filtered.forEach(row => {
+        const policy = row['退貨處理'] || '';
+        const parsedCondition = parseExcelPolicyToDate(policy);
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row['品名'] || ''}</td>
+          <td>${row['退貨倉別'] || ''}</td>
+          <td>${policy}</td>
+          <td><b>${parsedCondition}</b></td>
+        `;
+
+        if (parsedCondition.includes('皆可')) tr.classList.add('green');
+        else if (parsedCondition.includes('早於')) tr.classList.add('yellow');
+        else if (parsedCondition.includes('無法退貨')) tr.classList.add('red');
+
+        tbody.appendChild(tr);
+      });
+    });
+
+    // --- 原有 JSON 邏輯 ---
     function parseFormula(raw) {
-      const taiwanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+      const today = getTaipeiToday();
       const match = typeof raw === 'string' && raw.match(/TODAY\(\)\s*([+-])\s*(\d+)/);
       if (match) {
         const operator = match[1];
         const days = parseInt(match[2]);
-        const date = new Date(taiwanNow);
-        if (operator === '+') date.setDate(taiwanNow.getDate() + days);
-        else date.setDate(taiwanNow.getDate() - days);
-        return `效期早於 ${date.toISOString().split('T')[0]}`;
+        if (operator === '+') today.setDate(today.getDate() + days);
+        else today.setDate(today.getDate() - days);
+        return `效期早於 ${formatDate(today)}`;
       }
       return raw || '';
     }
 
-    async function loadData() {
+    async function loadJsonData() {
       try {
         const res = await fetch('./product_returns.json');
-        if (!res.ok) throw new Error('載入失敗');
-        data = await res.json();
-        renderTable('');
+        if (!res.ok) throw new Error('JSON 載入失敗');
+        jsonData = await res.json();
+        renderJsonTable('');
       } catch (error) {
-        document.getElementById('resultTable').innerHTML = '<tr><td colspan="3">無法載入資料，請確認 product_returns.json 是否與 index.html 放在相同目錄。</td></tr>';
-        console.error('資料載入錯誤：', error);
+        document.getElementById('resultTable').innerHTML = '<tr><td colspan="3">無法載入資料，請確認 product_returns.json 檔案。</td></tr>';
       }
     }
 
-    function getRowClass(content) {
-      if (/皆可退貨/.test(content)) return 'green';
-      if (/效期早於/.test(content)) return 'yellow';
-      if (/無法退貨/.test(content)) return 'red';
-      return '';
-    }
-
-    function renderTable(keyword) {
+    function renderJsonTable(keyword) {
       const tbody = document.getElementById('resultTable');
       tbody.innerHTML = '';
-      const filtered = data.filter(row => {
+      const filtered = jsonData.filter(row => {
         return (
-          row['廠商']?.includes(keyword) ||
-          row['產品']?.includes(keyword) ||
-          row['狀態A']?.includes(keyword) ||
-          row['狀態B']?.includes(keyword) ||
-          row['效期']?.toString().includes(keyword)
+          row['廠商']?.includes(keyword) || row['產品']?.includes(keyword) ||
+          row['狀態A']?.includes(keyword) || row['狀態B']?.includes(keyword)
         );
       });
       if (filtered.length === 0) {
@@ -85,34 +243,30 @@
       }
       filtered.forEach(row => {
         const tr = document.createElement('tr');
-        const td1 = document.createElement('td');
-        td1.textContent = row['廠商'];
-        const td2 = document.createElement('td');
-        td2.textContent = row['產品'];
-
         const parsed = parseFormula(row['效期']);
         const hasPrefix = (row['狀態A'] || '').includes('效期早於');
         const prefix = hasPrefix ? '' : (row['狀態A'] || '');
         let conditionText = `${prefix} ${parsed}`.trim();
         if (row['狀態B']) conditionText += ` ${row['狀態B']}`;
-
-        const td3 = document.createElement('td');
-        td3.textContent = conditionText;
-
-        tr.appendChild(td1);
-        tr.appendChild(td2);
-        tr.appendChild(td3);
-        tr.classList.add(getRowClass(conditionText));
-
+        
+        tr.innerHTML = `<td>${row['廠商']}</td><td>${row['產品']}</td><td>${conditionText}</td>`;
+        
+        if (/皆可退貨/.test(conditionText)) tr.classList.add('green');
+        else if (/效期早於/.test(conditionText)) tr.classList.add('yellow');
+        else if (/無法退貨/.test(conditionText)) tr.classList.add('red');
+        
         tbody.appendChild(tr);
       });
     }
 
     document.getElementById('searchBox').addEventListener('input', e => {
-      renderTable(e.target.value.trim());
+      renderJsonTable(e.target.value.trim());
     });
 
-    loadData();
+    // --- 系統初始化 ---
+    renderBoundaryDates();
+    loadExcelData();
+    loadJsonData();
   </script>
 </body>
 </html>
